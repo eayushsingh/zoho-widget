@@ -1,0 +1,210 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>AI Agent</title>
+  <style>
+    body { font-family: sans-serif; padding: 10px; }
+    pre { background: #f4f4f4; padding: 8px; max-height: 250px; overflow: auto; }
+    button { margin-right: 8px; padding: 8px 12px; }
+  </style>
+</head>
+<body>
+  <h3>AI Agent for Lead</h3>
+    <div style="display:flex;gap:8px;align-items:center;">
+    <button id="analyzeBtn" onclick="analyzeLead()">Analyze Lead</button>
+    <button id="apply" onclick="applySuggestion()">Apply Suggestion</button>
+  </div>
+
+  <div id="aiCard" style="margin-top:18px; padding:12px; border-radius:6px; border:1px solid #eee; max-width:780px;">
+    <div style="display:flex;align-items:center;gap:16px;">
+      <div style="font-size:28px;font-weight:700;">AI Score: <span id="score">0</span></div>
+      <div id="priorityBadge" style="padding:6px 10px;border-radius:4px;background:#ddd;font-weight:600;">Priority: N/A</div>
+    </div>
+    <div style="margin-top:12px;">
+      <div style="font-weight:700;margin-bottom:6px;">Explanation</div>
+      <div id="explanation" style="color:#333;">No analysis yet. Click "Analyze Lead" to run.</div>
+    </div>
+    <div id="suggestions" style="margin-top:12px;color:#222;"></div>
+  </div>
+
+  <!-- CRM widget SDK (exact path required) -->
+  <script src="https://static.zohocdn.com/crm/v2/widgets/sdk/ZohoEmbeddedAppSDK.min.js"></script>
+
+
+  <script>
+    // ✔ Your exact Catalyst Function URL
+    const FUNCTION_URL = "https://project-rainfall-60058837594.development.catalystserverless.in/server/mcpGateway/execute";
+
+  let currentRecord = null;
+  let lastResponse = null;
+
+    // NOTE: Zoho SDK initialization moved to the end of the file to ensure
+    // the SDK script is loaded before calling ZOHO methods. See bottom of file.
+
+    // Analyze AI button: reads latest lead via Zoho SDK, posts to /mcp and updates UI
+    async function analyzeLead() {
+      const analyzeBtn = document.getElementById('analyzeBtn');
+      const scoreEl = document.getElementById('score');
+      const priorityEl = document.getElementById('priorityBadge');
+      const explanationEl = document.getElementById('explanation');
+      const suggestionsEl = document.getElementById('suggestions');
+
+  analyzeBtn.disabled = true;
+  analyzeBtn.textContent = 'Analyzing...';
+      explanationEl.textContent = 'Analyzing lead...';
+      suggestionsEl.textContent = '';
+
+      try {
+        // Ensure we have the freshest record. If currentRecord is set, try fetching it again.
+        let recordBody = null;
+        // If PageLoad stored identifiers on window.currentRecord, fetch the full record now
+            if (!currentRecord && window.currentRecord) {
+          try {
+            const entity = window.currentRecord.Entity;
+            const id = (window.currentRecord.EntityId && window.currentRecord.EntityId[0]) || window.currentRecord.id;
+            if (entity && id) {
+                  // Guard ZOHO usage — if SDK isn't available, skip fetching
+                  if (window.ZOHO && ZOHO.CRM && ZOHO.CRM.API) {
+                    const resp = await ZOHO.CRM.API.getRecord({ Entity: entity, RecordID: id });
+                    currentRecord = resp && resp.data && resp.data[0] ? resp.data[0] : currentRecord;
+                  }
+            }
+          } catch (e) {
+            // ignore and proceed
+          }
+        }
+
+            if (currentRecord && currentRecord.id) {
+              try {
+                if (window.ZOHO && ZOHO.CRM && ZOHO.CRM.API) {
+                  const resp = await ZOHO.CRM.API.getRecord({ Entity: currentRecord.Entity || 'Leads', RecordID: currentRecord.id });
+                  const fresh = resp && resp.data && resp.data[0] ? resp.data[0] : currentRecord;
+                  currentRecord = fresh;
+                }
+              } catch (e) {
+                // ignore and use currentRecord
+              }
+            }
+
+        if (!currentRecord) {
+          explanationEl.textContent = 'No lead loaded in the widget.';
+          return;
+        }
+
+        recordBody = {
+          Industry: currentRecord.Industry,
+          Annual_Revenue: currentRecord.Annual_Revenue,
+          Email: currentRecord.Email,
+          id: currentRecord.id
+        };
+
+        const res = await fetch('/mcp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ record: recordBody })
+        });
+
+        if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+
+        let raw = await res.json();
+
+        // normalize mcp response (handle wrapped output or direct shape)
+        let mcp = null;
+        if (raw && typeof raw.output === 'string') {
+          try {
+            const out = JSON.parse(raw.output);
+            mcp = out.mcp_response || out;
+          } catch (e) {
+            try { mcp = JSON.parse(raw.output); } catch (e2) { mcp = raw; }
+          }
+        } else if (raw && raw.mcp_response) {
+          mcp = raw.mcp_response;
+        } else {
+          mcp = raw;
+        }
+
+        // Use fields expected from MCP
+        const score = (mcp && (mcp.score ?? mcp.Lead_Score)) || 0;
+        const priority = (mcp && (mcp.priority || mcp.Priority)) || 'N/A';
+        const explanation = (mcp && (mcp.explanation || mcp.message || '')) || '';
+
+        // Update UI (score as 0-100 number)
+        scoreEl.textContent = String(Math.round(score * 100));
+        priorityEl.textContent = 'Priority: ' + priority;
+        if (priority.toUpperCase() === 'HIGH') priorityEl.style.background = '#f8d7da', priorityEl.style.color = '#721c24';
+        else if (priority.toUpperCase() === 'MEDIUM') priorityEl.style.background = '#fff3cd', priorityEl.style.color = '#856404';
+        else priorityEl.style.background = '#d1ecf1', priorityEl.style.color = '#0c5460';
+
+        explanationEl.textContent = explanation || 'No explanation provided.';
+
+        // store lastResponse for Apply flow
+        lastResponse = mcp;
+      } catch (err) {
+        document.getElementById('explanation').textContent = 'Error analyzing lead: ' + (err.message || err);
+      } finally {
+        analyzeBtn.disabled = false;
+        analyzeBtn.textContent = 'Analyze Lead';
+      }
+    }
+
+    // Apply AI suggestion (named function so we can expose it to window)
+    function applySuggestion() {
+      if (!lastResponse) {
+        alert('Run Analyze first');
+        return;
+      }
+
+      // Build a simple message from suggested actions
+      const actions = lastResponse.actions || [];
+      if (!actions.length) {
+        alert('No suggested actions from AI.');
+        return;
+      }
+
+      const lines = ['Suggested Actions:'];
+      actions.forEach(a => {
+        if (a.type === 'update_field') {
+          lines.push(`- Set ${a.field} to ${a.value}`);
+        } else {
+          lines.push(`- ${a.type}: ${JSON.stringify(a)}`);
+        }
+      });
+
+      // Show the suggestions in a simple alert for demo
+      alert(lines.join('\n'));
+    }
+  </script>
+  <!-- Zoho SDK initialization and wiring (must be at the very end) -->
+  <script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const explanationEl = document.getElementById('explanation');
+
+    if (window.ZOHO) {
+      // Hook PageLoad and store the raw payload on window.currentRecord
+      ZOHO.embeddedApp.on("PageLoad", function (data) {
+        console.log("Zoho PageLoad", data);
+        window.currentRecord = data; // store lead data globally
+        // enable analyze button when a lead is loaded
+        if (analyzeBtn) {
+          analyzeBtn.disabled = false;
+        }
+      });
+
+      ZOHO.embeddedApp.init();
+      console.log("ZOHO SDK initialized");
+    } else {
+      // SDK not present (local preview). Disable analyze and show friendly message.
+      if (analyzeBtn) analyzeBtn.disabled = true;
+      if (explanationEl) explanationEl.textContent = 'No lead loaded in the widget.';
+      console.log("ZOHO SDK not loaded (preview mode)");
+    }
+  });
+
+  // expose functions so buttons work
+  window.analyzeLead = analyzeLead;
+  window.applySuggestion = applySuggestion;
+  </script>
+</body>
+</html>
