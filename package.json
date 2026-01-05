@@ -1,0 +1,12 @@
+{
+  "name": "ai_widget",
+  "version": "1.0.0",
+  "description": "Static widget with a small proxy to forward /mcp to the remote Function URL for local testing",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
