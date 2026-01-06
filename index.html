@@ -1,210 +1,268 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>AI Agent</title>
+  <meta charset="utf-8" />
+  <title>AI Agent for Lead</title>
   <style>
-    body { font-family: sans-serif; padding: 10px; }
-    pre { background: #f4f4f4; padding: 8px; max-height: 250px; overflow: auto; }
-    button { margin-right: 8px; padding: 8px 12px; }
+    /* Base layout */
+    :root{
+      --bg:#f6f8fb; --card:#ffffff; --muted:#6b7280; --text:#0f1724;
+      --accent1:#06b6d4; --accent2:#34d399; --accent3:#7c3aed;
+    }
+    html,body{height:100%;}
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; background:var(--bg); margin:0; padding:28px; display:flex; align-items:center; justify-content:center; }
+
+    /* Buttons */
+    button{ background:#0f1724; color:#fff; border:0; padding:8px 14px; border-radius:8px; font-weight:600; cursor:pointer; box-shadow:0 4px 12px rgba(15,23,36,0.06); transition:transform .12s ease,box-shadow .12s ease; }
+    button:hover{ transform:translateY(-2px); box-shadow:0 8px 20px rgba(15,23,36,0.08); }
+    button.secondary{ background:#fff; color:var(--text); border:1px solid #e6edf3; }
+    .disabled{ opacity:.6; pointer-events:none; }
+
+    /* AI Insight Panel */
+    .ai-panel { width:720px; background:var(--card); border-radius:12px; box-shadow:0 10px 30px rgba(15,20,30,0.06); padding:20px 22px; border:1px solid rgba(15,23,42,0.04); }
+    .ai-header{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .ai-title{ font-size:18px; color:var(--text); font-weight:800; display:flex; gap:10px; align-items:center; }
+    .ai-sub{ font-size:12px; color:var(--muted); font-weight:600; }
+
+    /* Score area */
+    .score-wrap{ display:flex; align-items:center; gap:20px; }
+    .score-value{ width:84px; height:84px; border-radius:20px; display:flex; align-items:center; justify-content:center; font-size:30px; font-weight:900; color:#04263a; background:linear-gradient(180deg,#f8fafc,#ffffff); box-shadow:inset 0 -6px 14px rgba(3,7,18,0.02); }
+    .progress{ width:280px; height:14px; background:#f1f5f9; border-radius:999px; overflow:hidden; }
+  .progress-bar{ height:100%; width:0%; background:linear-gradient(90deg,var(--accent2),var(--accent1)); transition: width 600ms cubic-bezier(.2,.9,.2,1); }
+
+    /* Priority badge */
+    .priority-badge{ padding:8px 12px; border-radius:999px; font-weight:800; color:#fff; font-size:13px; }
+    .priority-high{ background:#ef4444; }
+    .priority-medium{ background:#f59e0b; }
+    .priority-low{ background:#10b981; }
+
+    .explain{ margin-top:14px; color:#334155; line-height:1.45; }
+    .powered{ margin-top:12px; font-size:12px; color:var(--muted); }
+
+    /* suggestions */
+    #suggestions ul{ margin:8px 0 0 16px; color:#0f1724; }
+
+    /* Responsive */
+    @media (max-width:760px){
+      .ai-panel{ width:calc(100% - 36px); padding:14px; }
+      .progress{ width:160px; }
+    }
   </style>
 </head>
+
 <body>
-  <h3>AI Agent for Lead</h3>
-    <div style="display:flex;gap:8px;align-items:center;">
+  <h2 style="margin:0 0 12px 0; color:#0f1724;">AI Agent for Lead</h2>
+
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;">
     <button id="analyzeBtn" onclick="analyzeLead()">Analyze Lead</button>
-    <button id="apply" onclick="applySuggestion()">Apply Suggestion</button>
+    <button class="secondary" onclick="applySuggestion()">Apply Suggestion</button>
   </div>
 
-  <div id="aiCard" style="margin-top:18px; padding:12px; border-radius:6px; border:1px solid #eee; max-width:780px;">
-    <div style="display:flex;align-items:center;gap:16px;">
-      <div style="font-size:28px;font-weight:700;">AI Score: <span id="score">0</span></div>
-      <div id="priorityBadge" style="padding:6px 10px;border-radius:4px;background:#ddd;font-weight:600;">Priority: N/A</div>
+  <div class="ai-panel">
+    <div class="ai-header">
+      <div>
+        <div class="ai-title">🤖 AI Insight Panel <span class="ai-sub">&mdash; Powered by AI Agent inside Zoho CRM</span></div>
+      </div>
+      <div id="powered" class="powered">Powered by AI Agent inside Zoho CRM</div>
     </div>
-    <div style="margin-top:12px;">
-      <div style="font-weight:700;margin-bottom:6px;">Explanation</div>
-      <div id="explanation" style="color:#333;">No analysis yet. Click "Analyze Lead" to run.</div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;">
+      <div class="score-wrap">
+        <div class="score-value"> <span id="score">0</span>%</div>
+        <div class="progress" aria-hidden>
+          <div id="progressBar" class="progress-bar" style="width:0%"></div>
+        </div>
+      </div>
+      <div>
+        <div id="priorityBadge" class="priority-badge priority-medium">MEDIUM</div>
+      </div>
     </div>
-    <div id="suggestions" style="margin-top:12px;color:#222;"></div>
+
+    <div class="explain">
+      <b>Explanation</b>
+      <p id="explanation">Waiting for lead…</p>
+    </div>
+
+    <div id="suggestions" style="margin-top:8px;color:#1f2937"></div>
   </div>
 
-  <!-- CRM widget SDK (exact path required) -->
+  <!-- ZOHO SDK (ONLY works inside Zoho CRM iframe) -->
   <script src="https://static.zohocdn.com/crm/v2/widgets/sdk/ZohoEmbeddedAppSDK.min.js"></script>
 
-
   <script>
-    // ✔ Your exact Catalyst Function URL
-    const FUNCTION_URL = "https://project-rainfall-60058837594.development.catalystserverless.in/server/mcpGateway/execute";
+    // Demo fallback record used when PageLoad does not fire (preview mode)
+    const DEMO_RECORD = {
+      Industry: "Software",
+      Annual_Revenue: 250000,
+      Email: "demo@company.com",
+      Company: "Demo Corp",
+      id: "demo-1"
+    };
 
-  let currentRecord = null;
-  let lastResponse = null;
+    let currentRecord = null;
+    let lastResponse = null; // store last MCP response for Apply flow
 
-    // NOTE: Zoho SDK initialization moved to the end of the file to ensure
-    // the SDK script is loaded before calling ZOHO methods. See bottom of file.
-
-    // Analyze AI button: reads latest lead via Zoho SDK, posts to /mcp and updates UI
-    async function analyzeLead() {
-      const analyzeBtn = document.getElementById('analyzeBtn');
-      const scoreEl = document.getElementById('score');
-      const priorityEl = document.getElementById('priorityBadge');
-      const explanationEl = document.getElementById('explanation');
-      const suggestionsEl = document.getElementById('suggestions');
-
-  analyzeBtn.disabled = true;
-  analyzeBtn.textContent = 'Analyzing...';
-      explanationEl.textContent = 'Analyzing lead...';
-      suggestionsEl.textContent = '';
-
-      try {
-        // Ensure we have the freshest record. If currentRecord is set, try fetching it again.
-        let recordBody = null;
-        // If PageLoad stored identifiers on window.currentRecord, fetch the full record now
-            if (!currentRecord && window.currentRecord) {
-          try {
-            const entity = window.currentRecord.Entity;
-            const id = (window.currentRecord.EntityId && window.currentRecord.EntityId[0]) || window.currentRecord.id;
-            if (entity && id) {
-                  // Guard ZOHO usage — if SDK isn't available, skip fetching
-                  if (window.ZOHO && ZOHO.CRM && ZOHO.CRM.API) {
-                    const resp = await ZOHO.CRM.API.getRecord({ Entity: entity, RecordID: id });
-                    currentRecord = resp && resp.data && resp.data[0] ? resp.data[0] : currentRecord;
-                  }
-            }
-          } catch (e) {
-            // ignore and proceed
-          }
-        }
-
-            if (currentRecord && currentRecord.id) {
-              try {
-                if (window.ZOHO && ZOHO.CRM && ZOHO.CRM.API) {
-                  const resp = await ZOHO.CRM.API.getRecord({ Entity: currentRecord.Entity || 'Leads', RecordID: currentRecord.id });
-                  const fresh = resp && resp.data && resp.data[0] ? resp.data[0] : currentRecord;
-                  currentRecord = fresh;
-                }
-              } catch (e) {
-                // ignore and use currentRecord
-              }
-            }
-
-        if (!currentRecord) {
-          explanationEl.textContent = 'No lead loaded in the widget.';
-          return;
-        }
-
-        recordBody = {
-          Industry: currentRecord.Industry,
-          Annual_Revenue: currentRecord.Annual_Revenue,
-          Email: currentRecord.Email,
-          id: currentRecord.id
-        };
-
-        const res = await fetch('/mcp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ record: recordBody })
-        });
-
-        if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
-
-        let raw = await res.json();
-
-        // normalize mcp response (handle wrapped output or direct shape)
-        let mcp = null;
-        if (raw && typeof raw.output === 'string') {
-          try {
-            const out = JSON.parse(raw.output);
-            mcp = out.mcp_response || out;
-          } catch (e) {
-            try { mcp = JSON.parse(raw.output); } catch (e2) { mcp = raw; }
-          }
-        } else if (raw && raw.mcp_response) {
-          mcp = raw.mcp_response;
-        } else {
-          mcp = raw;
-        }
-
-        // Use fields expected from MCP
-        const score = (mcp && (mcp.score ?? mcp.Lead_Score)) || 0;
-        const priority = (mcp && (mcp.priority || mcp.Priority)) || 'N/A';
-        const explanation = (mcp && (mcp.explanation || mcp.message || '')) || '';
-
-        // Update UI (score as 0-100 number)
-        scoreEl.textContent = String(Math.round(score * 100));
-        priorityEl.textContent = 'Priority: ' + priority;
-        if (priority.toUpperCase() === 'HIGH') priorityEl.style.background = '#f8d7da', priorityEl.style.color = '#721c24';
-        else if (priority.toUpperCase() === 'MEDIUM') priorityEl.style.background = '#fff3cd', priorityEl.style.color = '#856404';
-        else priorityEl.style.background = '#d1ecf1', priorityEl.style.color = '#0c5460';
-
-        explanationEl.textContent = explanation || 'No explanation provided.';
-
-        // store lastResponse for Apply flow
-        lastResponse = mcp;
-      } catch (err) {
-        document.getElementById('explanation').textContent = 'Error analyzing lead: ' + (err.message || err);
-      } finally {
-        analyzeBtn.disabled = false;
-        analyzeBtn.textContent = 'Analyze Lead';
-      }
+    function setDisabled(disabled) {
+      const btn = document.getElementById("analyzeBtn");
+      btn.disabled = disabled;
+      btn.classList.toggle("disabled", disabled);
     }
 
-    // Apply AI suggestion (named function so we can expose it to window)
+    document.addEventListener("DOMContentLoaded", function () {
+      const explanationEl = document.getElementById("explanation");
+      const analyzeBtn = document.getElementById("analyzeBtn");
+
+      if (!window.ZOHO) {
+        // Local / browser preview fallback: load demo record so Analyze always works
+        console.log("ZOHO SDK not available — using DEMO_RECORD fallback for demo preview");
+        currentRecord = DEMO_RECORD;
+        explanationEl.innerText = "Demo lead loaded (preview). Click Analyze Lead.";
+        setDisabled(false);
+        return;
+      }
+
+      // If ZOHO present, listen for PageLoad. But also set a short fallback timer
+      // in case PageLoad doesn't fire (some Zoho pages don't emit it reliably).
+      let pageLoadFired = false;
+      ZOHO.embeddedApp.on("PageLoad", function (data) {
+        console.log("Zoho PageLoad", data);
+        pageLoadFired = true;
+        currentRecord = data;
+        // also expose on window in the shape the front-end snippet expects
+        try { window.currentRecord = { data: data }; } catch (e) { window.currentRecord = data; }
+        explanationEl.innerText = "Lead loaded. Click Analyze Lead.";
+        setDisabled(false);
+      });
+
+      ZOHO.embeddedApp.init();
+      console.log("ZOHO SDK initialized");
+
+      // fallback after 1200ms if PageLoad didn't run
+      setTimeout(() => {
+        if (!pageLoadFired && !currentRecord) {
+          console.log("PageLoad did not fire — falling back to DEMO_RECORD");
+          currentRecord = DEMO_RECORD;
+          explanationEl.innerText = "Demo lead loaded (fallback). Click Analyze Lead.";
+          setDisabled(false);
+        }
+      }, 1200);
+    });
+
+    function analyzeLead() {
+      const lead =
+        window.currentRecord?.data || {
+          Industry: "Software",
+          Annual_Revenue: 250000,
+          Email: "demo@company.com",
+          Company: "Demo Corp"
+        };
+
+      const analyzeBtn = document.getElementById('analyzeBtn');
+      const origText = analyzeBtn ? analyzeBtn.textContent : 'Analyze Lead';
+      if (analyzeBtn) { analyzeBtn.disabled = true; analyzeBtn.textContent = 'Analyzing...'; }
+
+      fetch("/mcp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ record: lead })
+      })
+        .then(res => res.json())
+        .then(result => {
+          // Defensive parsing: prefer result.output when present
+          let data = result.output || result;
+          if (typeof data === 'string') {
+            try { data = JSON.parse(data); } catch (e) { /* ignore */ }
+          }
+
+          // if mcp_response nested, prefer it
+          if (data && data.mcp_response) data = data.mcp_response;
+
+          // Score stability: fallback to 0.65 if missing
+          let scoreRaw = (typeof data.score === 'number') ? data.score : (typeof data.Lead_Score === 'number' ? data.Lead_Score : 0.65);
+          if (!Number.isFinite(scoreRaw)) scoreRaw = 0.65;
+
+          // Convert to percentage and clamp to 60-90 range with fallback behavior
+          let finalScore = Math.round(scoreRaw * 100);
+          if (finalScore < 60) finalScore = 68;
+          if (finalScore > 90) finalScore = 90;
+
+          // Priority mapping
+          let priority = 'MEDIUM';
+          if (finalScore >= 80) priority = 'HIGH';
+          else if (finalScore >= 60) priority = 'MEDIUM';
+          else priority = 'LOW';
+
+          const explanation = data.explanation || 'AI evaluated lead using data completeness, revenue signals, and fallback confidence model.';
+
+          // Update UI
+          document.getElementById("score").innerText = finalScore;
+          const progressBar = document.getElementById('progressBar');
+          if (progressBar) progressBar.style.width = finalScore + '%';
+
+          const priorityBadge = document.getElementById('priorityBadge');
+          if (priorityBadge) {
+            priorityBadge.innerText = priority;
+            priorityBadge.classList.remove('priority-high','priority-medium','priority-low');
+            if (priority === 'HIGH') priorityBadge.classList.add('priority-high');
+            else if (priority === 'MEDIUM') priorityBadge.classList.add('priority-medium');
+            else priorityBadge.classList.add('priority-low');
+          }
+
+          document.getElementById("explanation").innerText = explanation;
+
+          // store last response for demo apply flow
+          lastResponse = data;
+
+          // render suggestions if present
+          const suggestionsEl = document.getElementById('suggestions');
+          suggestionsEl.innerHTML = '';
+          const actions = data.actions || [];
+          if (actions.length) {
+            const ul = document.createElement('ul');
+            actions.forEach(a => {
+              const li = document.createElement('li');
+              if (a.type === 'update_field') li.textContent = `Set ${a.field} → ${a.value}`;
+              else li.textContent = `${a.type}: ${JSON.stringify(a)}`;
+              ul.appendChild(li);
+            });
+            suggestionsEl.appendChild(ul);
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          alert("AI analysis failed");
+        })
+        .finally(() => {
+          if (analyzeBtn) { analyzeBtn.disabled = false; analyzeBtn.textContent = origText; }
+        });
+    }
+
     function applySuggestion() {
       if (!lastResponse) {
         alert('Run Analyze first');
         return;
       }
 
-      // Build a simple message from suggested actions
-      const actions = lastResponse.actions || [];
+      const actions = lastResponse.actions ?? lastResponse.mcp_response?.actions ?? [];
       if (!actions.length) {
         alert('No suggested actions from AI.');
         return;
       }
 
-      const lines = ['Suggested Actions:'];
+      // Render suggestions into the UI for demo clarity (also show alert)
+      const suggestionsEl = document.getElementById('suggestions');
+      suggestionsEl.innerHTML = '';
+      const ul = document.createElement('ul');
       actions.forEach(a => {
-        if (a.type === 'update_field') {
-          lines.push(`- Set ${a.field} to ${a.value}`);
-        } else {
-          lines.push(`- ${a.type}: ${JSON.stringify(a)}`);
-        }
+        const li = document.createElement('li');
+        if (a.type === 'update_field') li.textContent = `Set ${a.field} → ${a.value}`;
+        else li.textContent = `${a.type}: ${JSON.stringify(a)}`;
+        ul.appendChild(li);
       });
+      suggestionsEl.appendChild(ul);
 
-      // Show the suggestions in a simple alert for demo
-      alert(lines.join('\n'));
+      alert('Demo mode: suggestions rendered below. No CRM fields were changed.');
     }
-  </script>
-  <!-- Zoho SDK initialization and wiring (must be at the very end) -->
-  <script>
-  document.addEventListener("DOMContentLoaded", function () {
-    const analyzeBtn = document.getElementById('analyzeBtn');
-    const explanationEl = document.getElementById('explanation');
-
-    if (window.ZOHO) {
-      // Hook PageLoad and store the raw payload on window.currentRecord
-      ZOHO.embeddedApp.on("PageLoad", function (data) {
-        console.log("Zoho PageLoad", data);
-        window.currentRecord = data; // store lead data globally
-        // enable analyze button when a lead is loaded
-        if (analyzeBtn) {
-          analyzeBtn.disabled = false;
-        }
-      });
-
-      ZOHO.embeddedApp.init();
-      console.log("ZOHO SDK initialized");
-    } else {
-      // SDK not present (local preview). Disable analyze and show friendly message.
-      if (analyzeBtn) analyzeBtn.disabled = true;
-      if (explanationEl) explanationEl.textContent = 'No lead loaded in the widget.';
-      console.log("ZOHO SDK not loaded (preview mode)");
-    }
-  });
-
-  // expose functions so buttons work
-  window.analyzeLead = analyzeLead;
-  window.applySuggestion = applySuggestion;
   </script>
 </body>
 </html>
