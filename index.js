@@ -47,7 +47,7 @@ app.post('/mcp', async (req, res) => {
       res.status(forwarded.status).type('text').send(text);
     }
   } catch (err) {
-    console.error('Proxy /mcp error:', err);
+    console.error('Proxy /mcp error::', err);
     res.status(500).json({ error: err.message || String(err) });
   }
 });
