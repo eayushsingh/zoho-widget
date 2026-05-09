@@ -5,7 +5,7 @@ const path = require('path');
 const FUNCTION_URL = "https://project-rainfall-60058837594.development.catalystserverless.in/server/mcpGateway/execute";
 
 const app = express();
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '2mb' }));
 
 // Allow local testing from the browser
 app.use((req, res, next) => {
