@@ -1,56 +1,93 @@
 const express = require('express');
 const path = require('path');
 
-// Mirror the FUNCTION_URL used in index.html so the proxy forwards there
-const FUNCTION_URL = "https://project-rainfall-60058837594.development.catalystserverless.in/server/mcpGateway/execute";
-
 const app = express();
+
+const FUNCTION_URL =
+  'https://project-rainfall-60058837594.development.catalystserverless.in/server/mcpGateway/execute';
+
+const PORT = process.env.PORT || 3000;
+const PUBLIC_DIR = path.join(process.cwd(), 'public');
+
 app.use(express.json({ limit: '2mb' }));
 
-// Allow local testing from the browser
 app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || 'http://localhost:3000');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.sendStatus(200);
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+
   next();
 });
 
-// Serve static files (index.html etc.) from the project root
-app.use(express.static(process.cwd()));
+app.use(express.static(
+  require('fs').existsSync(path.join(PUBLIC_DIR, 'index.html'))
+    ? PUBLIC_DIR
+    : process.cwd()
+));
 
-// Proxy endpoint for /mcp — forwards the incoming record to the remote FUNCTION_URL
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
 app.post('/mcp', async (req, res) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
   try {
-    // Build payload compatible with the original FUNCTION_URL usage
-    const incoming = req.body || {};
+    const incoming = req.body;
+
+    if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) {
+      return res.status(400).json({ error: 'A JSON object is required.' });
+    }
+
+    const record = incoming.record ?? incoming;
+
+    if (!record || typeof record !== 'object' || Array.isArray(record)) {
+      return res.status(400).json({ error: 'Invalid record.' });
+    }
 
     const payloadObj = {
-      // if caller sent { record: {...} } use it, otherwise use the whole incoming body
-      record: incoming.record || incoming,
+      record,
       request: 'score_and_assign'
     };
 
-    // The remote function previously expected { payload: JSON.stringify(payloadObj) }
     const forwarded = await fetch(FUNCTION_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ payload: JSON.stringify(payloadObj) })
+      body: JSON.stringify({
+        payload: JSON.stringify(payloadObj)
+      }),
+      signal: controller.signal
     });
 
     const text = await forwarded.text();
-    // Try to parse JSON, otherwise send raw text
+
+    let result;
+
     try {
-      const json = JSON.parse(text);
-      res.status(forwarded.status).json(json);
-    } catch (e) {
-      res.status(forwarded.status).type('text').send(text);
+      result = JSON.parse(text);
+    } catch {
+      result = { result: text };
     }
+
+    return res.status(forwarded.status).json(result);
   } catch (err) {
-    console.error('Proxy /mcp error::', err);
-    res.status(500).json({ error: err.message || String(err) });
+    console.error('Proxy /mcp error:', err.message);
+
+    if (err.name === 'AbortError') {
+      return res.status(504).json({ error: 'Remote function timed out.' });
+    }
+
+    return res.status(502).json({ error: 'Remote function request failed.' });
+  } finally {
+    clearTimeout(timeout);
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Static server + /mcp proxy listening on http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`OOHI widget server running on port ${PORT}`);
+});
